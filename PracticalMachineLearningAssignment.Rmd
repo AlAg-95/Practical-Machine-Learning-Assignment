@@ -1,0 +1,104 @@
+---
+title: "Coursera Practical Machine Learning Assignment"
+author: "Alessandro Agizza"
+date: "11/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Summary
+
+The objective of the Coursera Practical Machine Learning Assignment is to predict the quality of a movement according to data collected by body sensors during the action. The dataset used in this project is a courtesy of “Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers’ Data Classification of Body Postures and Movements”.
+
+## Data
+
+Six young males, aged between 20-28 years and with little weight lifting experience, were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). In order to make sure the execution complied to the manner they were supposed to simulate the partecipants used a light dumbbell (1.25kg) and were supervised by an experienced weight lifter. Accelerometers on the belt, forearm, arm, and dumbell of teh participants were used to generate the following data, these can be used to predict the class(quality) of a Unilateral Dumbbell Biceps Curl repetition of one of the parteciparts. The data consists of a Training data and a Test data (to be used to validate the selected model).
+
+```{r cars}
+library(caret)
+library(rattle)
+training <- read.csv("pml-training.csv"); training$X <- NULL
+testing <- read.csv("pml-testing.csv"); testing$X <-NULL
+dim(training); dim(testing); str(training)
+VariablesNA <- which(apply(training, 2, function(x) sum(is.na(x)))>0)
+VariablesDIV <- which(apply(training, 2, function(x) sum(x == "#DIV/0!"))>0)
+VariablesBlank <- which(apply(training, 2, function(x) sum(x == ""))>0)
+length(VariablesNA); length(VariablesDIV); length(VariablesBlank)
+sum(VariablesDIV %in% VariablesBlank); sum(VariablesDIV %in% VariablesNA)                      
+training <- training[,-c(1:6,VariablesNA, VariablesBlank)]
+testing <- testing[,-c(1:6,VariablesNA, VariablesBlank)]
+str(training)
+```
+
+The training data set has 19622 rows/observations of 159 columns/variables. The first six columns specify teh partecipamt and the time when it did the test, so they are not useful for the prediction model to build. The variables from the 7th to the 158th describe the signal recorded by the body sensors loacated on the belt (7-44), arm (45-82), dumbell (83-120) and forearm (121-158). Indeed each group is formed by 38 variables describing the signal in terms of: roll, pitch, yaw and their kurtosis, skewness, maximum, minimum and amplitude (18); total and variance of the acceleration (2); averages, standard deviations and variances of roll, pitch and yaw (9); lastly, the measures of the gyroscopy, accelerometer, magnetometer in three axis (9). So the last column indicates the class (quality) of the recorder repetion (observation). In order to reduce corelation among the dat set columns, it is proper to eliminate the amplitude columns which are the differen among the corresponding minimum an maximum columns. We can notice that 67 columns have NA values for the most of the observations, then other 33 variables have values equal to #DIV/0! or "" on almost every observation. So we will remove 106 of the 159 columns from the data set, because they will not produce any information. The same procedure is applied to the "testing" data, this is the validation data set.
+
+```{r}
+set.seed(3433)
+inTrain <- createDataPartition(training$classe, p=0.70, list=FALSE)
+trainingTrain <- training[inTrain,]
+trainingTest <- training[-inTrain,]
+```
+
+The training data is divided into Train and Test parts to build classification algorithms and evaluate their out-of-sample accuracies.
+
+## Classification Algorithms
+
+Using cross validation with k=3 folds to limit the effect of overfitting and improve the efficiency, the following classifization algorithms are built on the training part of the "pml-training.csv" and their out-of-sample accuracies are evaluated on the testing part of the "pml-training.csv": 
+
+### Multinomial Logistic Regression
+```{r, results='hide'}
+trControl <- trainControl(method="cv", number=3)
+fitGLM <- train(classe~., data=trainingTrain, method="multinom", trControl=trControl)
+```
+```{r}
+predGLM <- predict(fitGLM, newdata = trainingTest)
+accuracyGLM <- mean(predGLM == trainingTest$classe); accuracyGLM
+```
+
+### Regression Tree
+```{r, results='hide'}
+fitRT <- train(classe~., data=trainingTrain, method="rpart", trControl=trControl)
+fancyRpartPlot(fitRT$finalModel)
+```
+```{r}
+predRT <- predict(fitRT, newdata = trainingTest)
+accuracyRT <- mean(predRT == trainingTest$classe); accuracyRT
+```
+
+### Random Forest
+```{r, results='hide'}
+fitRF <- train(classe~., data=trainingTrain, method="rf", trControl=trControl, verbose=FALSE)
+```
+```{r}
+predRF <- predict(fitRF, newdata = trainingTest)
+accuracyRF <- mean(predRF == trainingTest$classe); accuracyRF
+```
+
+### Generalized Boosted Regression Models
+```{r, results='hide'}
+fitGBM  <- train(classe ~ ., data=trainingTrain, method = "gbm", trControl = trControl, verbose = FALSE)
+```
+```{r}
+predGBM <- predict(fitGBM, newdata = trainingTest)
+accuracyGBM <- mean(predGBM == trainingTest$classe); accuracyGBM
+```
+### Linear Discriminant Analysis
+```{r, results='hide'}
+fitLDA  <- train(classe ~ ., data=trainingTrain, method = "lda", trControl = trControl, verbose = FALSE)
+```
+```{r}
+predLDA <- predict(fitLDA, newdata = trainingTest)
+accuracyLDA <- mean(predLDA == trainingTest$classe); accuracyLDA
+```
+
+### Chosen Model
+The accuracy of the *Random Forest* on the testing part of the training data set is the highest *0.9936*, while the corresponding out-of-sample-error is *0.0064*.
+
+## Validation
+The chosen classification model is applied to the validation data "pml-testing.csv" in order to predict the class of the testing observations.
+```{r}
+Results <- predict(fitRF, newdata=testing)
+Results
+```
